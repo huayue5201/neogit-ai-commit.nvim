@@ -70,14 +70,27 @@ local function clean_commit_message(message)
 end
 
 local function get_api_key()
-  -- First try to get from environment variable
+  -- 优先 setup() 里传入的 key（dotfiles 从 ~/.env 的 DEEPSEEK_API_KEY 读），
+  -- 否则再退回 OPENAI_API_KEY 环境变量。反过来会让全局 OPENAI_API_KEY
+  -- 盖掉 DeepSeek 端点用的 key，直接 401。
+  if config.openai_api_key and config.openai_api_key ~= "" then
+    return config.openai_api_key
+  end
+
   local env_key = vim.env.OPENAI_API_KEY
   if env_key and env_key ~= "" then
     return env_key
   end
-  
-  -- Fallback to configured key
-  return config.openai_api_key
+
+  return nil
+end
+
+-- 错误信息里可能整条 curl 命令（带 Authorization 头）被回显，输出前脱敏
+local function redact(message)
+  message = tostring(message)
+  message = message:gsub("Bearer%s+[%w%._%-]+", "Bearer ***")
+  message = message:gsub("sk%-[%w%._%-]+", "sk-***")
+  return message
 end
 
 -- Setup keymaps using autocmd
@@ -121,7 +134,7 @@ end
 function M.generate_commit_message(bufnr)
   local api_key = get_api_key()
   if not api_key then
-    vim.notify("OpenAI API key not found. Please set OPENAI_API_KEY environment variable or configure via setup()", vim.log.levels.ERROR)
+    vim.notify("No API key: set DEEPSEEK_API_KEY in ~/.env or pass openai_api_key to setup()", vim.log.levels.ERROR)
     return
   end
 
@@ -193,12 +206,12 @@ function M.generate_commit_message(bufnr)
   })
 
   if not ok then
-    vim.notify("Failed to generate commit message: " .. tostring(response), vim.log.levels.ERROR)
+    vim.notify("Failed to generate commit message: " .. redact(response), vim.log.levels.ERROR)
     return
   end
 
   if response.status ~= 200 then
-    vim.notify("Failed to generate commit message: " .. response.body, vim.log.levels.ERROR)
+    vim.notify("Failed to generate commit message: " .. redact(response.body), vim.log.levels.ERROR)
     return
   end
 
@@ -274,7 +287,7 @@ end
 function M.generate_commit_message_in_zh(bufnr)
   local api_key = get_api_key()
   if not api_key then
-    vim.notify("未找到 OpenAI API 密钥。请设置 OPENAI_API_KEY 环境变量或通过 setup() 配置", vim.log.levels.ERROR)
+    vim.notify("未找到 API 密钥：请在 ~/.env 中设置 DEEPSEEK_API_KEY，或通过 setup() 传入 openai_api_key", vim.log.levels.ERROR)
     return
   end
 
@@ -339,12 +352,12 @@ function M.generate_commit_message_in_zh(bufnr)
   })
 
   if not ok then
-    vim.notify("生成提交信息失败: " .. tostring(response), vim.log.levels.ERROR)
+    vim.notify("生成提交信息失败: " .. redact(response), vim.log.levels.ERROR)
     return
   end
 
   if response.status ~= 200 then
-    vim.notify("生成提交信息失败: " .. response.body, vim.log.levels.ERROR)
+    vim.notify("生成提交信息失败: " .. redact(response.body), vim.log.levels.ERROR)
     return
   end
 
