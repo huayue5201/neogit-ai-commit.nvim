@@ -174,7 +174,10 @@ function M.generate_commit_message(bufnr)
 
   -- Make the API request
   local curl = require("plenary.curl")
-  local response = curl.post(config.api_url, {
+  -- NOTE: 大 diff 下 LLM 响应常超过 plenary.curl 默认 10s 超时，会抛
+  -- "was unable to complete in N ms" 把整条 curl 命令（含 API key）打进 E5108。
+  local ok, response = pcall(curl.post, config.api_url, {
+    timeout = 120000,
     headers = {
       ["Content-Type"] = "application/json",
       ["Authorization"] = "Bearer " .. api_key
@@ -188,6 +191,11 @@ function M.generate_commit_message(bufnr)
       stream = false,
     })
   })
+
+  if not ok then
+    vim.notify("Failed to generate commit message: " .. tostring(response), vim.log.levels.ERROR)
+    return
+  end
 
   if response.status ~= 200 then
     vim.notify("Failed to generate commit message: " .. response.body, vim.log.levels.ERROR)
@@ -314,7 +322,8 @@ function M.generate_commit_message_in_zh(bufnr)
 
   -- Make the API request
   local curl = require("plenary.curl")
-  local response = curl.post(config.api_url, {
+  local ok, response = pcall(curl.post, config.api_url, {
+    timeout = 120000,
     headers = {
       ["Content-Type"] = "application/json",
       ["Authorization"] = "Bearer " .. api_key
@@ -328,6 +337,11 @@ function M.generate_commit_message_in_zh(bufnr)
       stream = false,
     })
   })
+
+  if not ok then
+    vim.notify("生成提交信息失败: " .. tostring(response), vim.log.levels.ERROR)
+    return
+  end
 
   if response.status ~= 200 then
     vim.notify("生成提交信息失败: " .. response.body, vim.log.levels.ERROR)
